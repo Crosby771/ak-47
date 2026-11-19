@@ -23,8 +23,11 @@ button:disabled{opacity:.45;cursor:default}
 nav button{border-radius:999px;padding:7px 15px}
 .app{flex:1;min-height:0;display:grid;grid-template-columns:1fr 380px}
 #view{position:relative;overflow:hidden;min-height:340px}
-#view canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-#c2d{display:none;cursor:none}
+#view canvas{position:absolute;inset:0;width:100%;height:100%}
+#view #c2d{display:none;cursor:none}
+#c3d{cursor:grab}
+#c3d:active{cursor:grabbing}
+#c3d.hov{cursor:pointer}
 aside{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:16px}
 aside section{display:none}
 aside section.on{display:block}
@@ -526,15 +529,21 @@ $('#explode').oninput=e=>{explodeT=e.target.value/100;$('#explodeVal').textConte
 
 /* ---------- Picking ---------- */
 const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(); let downPos=null;
-c3d.addEventListener('pointerdown',e=>downPos=[e.clientX,e.clientY]);
-c3d.addEventListener('pointerup',e=>{
-  if(!downPos||Math.hypot(e.clientX-downPos[0],e.clientY-downPos[1])>5)return;
-  const r=c3d.getBoundingClientRect(); ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+function pickAt(cx,cy){
+  const r=c3d.getBoundingClientRect(); ndc.set((cx-r.left)/r.width*2-1,-(cy-r.top)/r.height*2+1);
   ray.setFromCamera(ndc,camera);
   let hits=ray.intersectObjects(allMeshes.filter(m=>m.visible),false);
   if(viewMode==='cut')hits=hits.filter(h=>!(h.object.userData.outer&&h.point.z>0.01));
   if(viewMode==='xray'){const inner=hits.find(h=>!h.object.userData.outer);if(inner)hits=[inner];}
-  const key=hits[0]?.object.userData.part||null;
+  return hits[0]?.object.userData.part||null;
+}
+let hovT=0;
+c3d.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse'||e.buttons)return;const now=performance.now();if(now-hovT<60)return;hovT=now;
+  c3d.classList.toggle('hov',!!pickAt(e.clientX,e.clientY)&&(tab==='structure'||E.on));});
+c3d.addEventListener('pointerdown',e=>downPos=[e.clientX,e.clientY]);
+c3d.addEventListener('pointerup',e=>{
+  if(!downPos||Math.hypot(e.clientX-downPos[0],e.clientY-downPos[1])>5)return;
+  const key=pickAt(e.clientX,e.clientY);
   if(E.on){ if(key) onEngineClick(key); }
   else if(tab==='structure') select(key);
 });
@@ -792,7 +801,7 @@ ovH.addEventListener('contextmenu',e=>e.preventDefault());
 const holdOn=()=>{SH.hold=true;}, holdOff=()=>{SH.hold=false;SH.holdT=0;};
 $('#shHold').addEventListener('pointerdown',holdOn);['pointerup','pointerleave'].forEach(ev=>$('#shHold').addEventListener(ev,holdOff));
 addEventListener('keydown',e=>{if(e.code==='Space'&&tab==='shoot'){e.preventDefault();if(!e.repeat)holdOn();}});
-addEventListener('keyup',e=>{if(e.code==='Space'&&tab==='shoot')holdOff();});
+addEventListener('keyup',e=>{if(e.code==='Space'&&tab==='shoot'){e.preventDefault();holdOff();}});
 function shTick(dt){
   SH.t+=dt;
   let target=1.0; if(SH.hold){SH.holdT+=dt;target=SH.holdT<5?.22:Math.min(2.4,.22+(SH.holdT-5)*.8);}
@@ -865,7 +874,7 @@ function useRealModel(gltf){
   });
   setViewMode(viewMode);
 }
-function startApp(){setViewMode('normal');setAssembled();goCam('general');camTw.t=.999;$('#loading')?.remove();loop();}
+function startApp(){setTab('structure');goCam('general');camTw.t=.999;$('#loading')?.remove();loop();}
 try{
   const b64=document.getElementById('akmodel').textContent.trim();
   const bin=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
